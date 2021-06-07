@@ -1,388 +1,175 @@
 #include "NumberWithUnits.hpp"
-
+#include <map>
+#include <cstdlib>
 using namespace std;
 
 namespace ariel{
 
+    const double EPSILON = 0.00001; 
+    static map<string, map<string, double>> units_map;
+
+    NumberWithUnits::NumberWithUnits(double unit, const string &type)
+    {
+        units_map.at(type); 
+        this->unit = unit;
+        this->type = type;
+    }
+
     void NumberWithUnits::read_units(ifstream &units_file){
-        string text;
-        while(getline(units_file, text)){
-            //cout << text << endl;
-            string word = "";
-            for (auto x : text) 
+        string type1, type2, equal;
+        double unit1 = 0, unit2 = 0;
+
+        while (units_file >> unit1 >> type1 >> equal >> unit2 >> type2)
+        {
+            units_map[type1][type2] = unit2;
+            units_map[type2][type1] = unit1 / unit2;
+            for (auto &connected_type : units_map[type1])
             {
-                if (x == ' ')
-                {
-                    if(word != "="){
-                        if(word!= "1"){
-                            cout << word << endl;
-                        }
-                    //word = word.substr(0, word.length() - 1);    
-                    }
-                    word = "";
-                }
-                else {
-                    word = word + x;
-                }
+                double connected_val = units_map[type2][type1] * connected_type.second;
+                units_map[type2][connected_type.first] = connected_val;
+                units_map[connected_type.first][type2] = 1 / connected_val;
             }
-            cout << word << endl;
+            for (auto &connected_type : units_map[type2])
+            {
+                double connected_val = units_map[type1][type2] * connected_type.second;
+                units_map[type1][connected_type.first] = connected_val;
+                units_map[connected_type.first][type1] = 1 / connected_val;
+            }
         }
     }
 
-    string check_type(NumberWithUnits a, NumberWithUnits b){
-        if((a.type == "km" && (b.type == "km" || b.type == "m" || b.type == "cm")) || 
-        (a.type == "m" && (b.type == "km" || b.type == "m" || b.type == "cm")) ||
-        (a.type == "cm" && (b.type == "km" || b.type == "m" || b.type == "cm"))){
-            return "distance";
+    double check_type_convert(double value, const string &type1,const string &type2)
+    {
+        if (units_map[type1].count(type2) == 0){
+            throw invalid_argument("Can not convert this two types");
+        } 
+        if (type1 == type2){
+            return value;
         }
+        return value * units_map[type1][type2];
+    }
+
+    NumberWithUnits operator+(const NumberWithUnits &a, const NumberWithUnits &b){
+        double plus_bin = check_type_convert(b.unit, b.type, a.type);
+        NumberWithUnits temp(plus_bin + a.unit, a.type);
+        return temp;
+    }
         
-        if((a.type == "ton" && (b.type == "ton" || b.type == "kg" || b.type == "g")) ||
-        (a.type == "kg" && (b.type == "ton" || b.type == "kg" || b.type == "g")) ||
-        (a.type == "g" && (b.type == "ton" || b.type == "kg" || b.type == "g"))){
-            return "size";
+    NumberWithUnits& NumberWithUnits::operator+=(const NumberWithUnits &b){
+         this->unit += check_type_convert(b.unit, b.type, this->type);
+        return *this;
+    }    
+
+    NumberWithUnits operator+(const NumberWithUnits &a){
+        NumberWithUnits temp(+a.unit,a.type);
+        return temp;
+    }
+
+    NumberWithUnits operator-(const NumberWithUnits &a, const NumberWithUnits &b){
+        double minus_bin = check_type_convert(b.unit, b.type, a.type);
+        NumberWithUnits temp(a.unit- minus_bin, a.type);
+        return temp;
+    }
+
+    NumberWithUnits& NumberWithUnits::operator-=(const NumberWithUnits &b){
+        this->unit -= check_type_convert(b.unit, b.type, this->type);
+        return *this;
+    }
+
+    NumberWithUnits operator-(const NumberWithUnits &a){
+       NumberWithUnits temp(-a.unit,a.type);
+        return temp;
+    }
+
+    bool operator>(const NumberWithUnits &a, const NumberWithUnits &b){
+        return a.unit > check_type_convert(b.unit,b.type,a.type);
+    }
+
+    bool operator>=(const NumberWithUnits &a, const NumberWithUnits &b){
+        double greater_equ = check_type_convert(b.unit,b.type,a.type);
+        return a.unit > greater_equ || abs(a.unit-greater_equ) < EPSILON;
+    }
+
+    bool operator<(const NumberWithUnits &a, const NumberWithUnits &b){
+        return a.unit < check_type_convert(b.unit,b.type,a.type);
+    }
+
+    bool operator<=(const NumberWithUnits &a, const NumberWithUnits &b){
+        double smaller_equ = check_type_convert(b.unit,b.type,a.type);
+        return a.unit < smaller_equ || abs(a.unit-smaller_equ) < EPSILON;
+    }
+
+    bool operator==(const NumberWithUnits &a, const NumberWithUnits &b){
+        return abs(a.unit-check_type_convert(b.unit,b.type,a.type)) < EPSILON;
+    }
+
+    bool operator!=(const NumberWithUnits &a, const NumberWithUnits &b){
+        return a.unit != check_type_convert(b.unit,b.type,a.type);
+    }
+
+    NumberWithUnits &operator++(NumberWithUnits &a){
+        a.unit++;
+        return a;;
+    }
+
+    NumberWithUnits operator++(NumberWithUnits &a, int)
+    {
+        NumberWithUnits temp(a.unit++,a.type);
+        return temp;
+    }
+
+    NumberWithUnits &operator--(NumberWithUnits &a){
+        a.unit--;
+        return a;
+    }
+
+    NumberWithUnits operator--(NumberWithUnits &a, int){
+        NumberWithUnits temp(a.unit--,a.type);
+        return temp;
+    }
+
+    NumberWithUnits operator*(double num, const NumberWithUnits &a){
+        return NumberWithUnits(a.unit*num, a.type);
+    }
+
+    NumberWithUnits operator*(const NumberWithUnits &a, double num){
+        return NumberWithUnits(a.unit*num, a.type);
+    }
+
+    NumberWithUnits operator*(const NumberWithUnits &a,const NumberWithUnits &b)
+    {
+        double unit_mul = check_type_convert(b.unit,a.type,b.type);
+        NumberWithUnits temp(a.unit*unit_mul, a.type);
+        return temp;
+    }
+
+    ostream& operator<<(ostream& out, const NumberWithUnits &a){
+        return out << a.unit << "[" << a.type << "]";
+    }
+
+    istream& operator>>(istream& in, NumberWithUnits &a){
+        double value = 0;
+        string type;
+        in >> value;
+        char temp = ' ';
+        bool flag = false;
+        while(temp!=']'){
+            if(temp=='['){
+                flag = true;
+            }
+            in >> temp;
+            if(flag){
+                if(temp != ' ' && temp != ']') {
+                    type += temp;
+                }
+            }
         }
-        
-        if((a.type == "hour" && (b.type == "hour" || b.type == "min" || b.type == "sec")) || 
-        (a.type == "min" && (b.type == "hour" || b.type == "min" || b.type == "sec")) ||
-        (a.type == "sec" && (b.type == "hour" || b.type == "min" || b.type == "sec"))){
-            return "time";
+        if(units_map.count(type)==0)
+        {
+            throw invalid_argument("type is not in the units map");
         }
-        
-        if((a.type == "USD" && (b.type == "USD" || b.type == "ILS")) ||
-        (a.type == "ILS" && (b.type == "USD" || b.type == "ILS"))){
-            return "money";
-        }
-        return "false";
-    }
-
-    NumberWithUnits operator+(NumberWithUnits a, NumberWithUnits b){
-        //NumberWithUnits c(0,NULL);
-        /*if(check_type(a,b) == "false"){
-            throw invalid_argument("These two numbers are of different dimensions and are not connectable.");
-        }
-        else{
-            if(check_type(a,b) == "distance"){
-                if(a.type == "km" && b.type == "km"){
-                   c.unit = a.unit + b.unit;
-                   c.type = "km";
-                }
-                if(a.type == "km" && b.type == "m"){
-                    c.unit = a.unit * 1000 + b.unit;
-                    c.unit = c.unit/1000;
-                    c.type = "km";
-                }
-                if(a.type == "km" && b.type == "cm"){
-                    c.unit = a.unit * 1000 + b.unit/100;
-                    c.unit = c.unit/1000;
-                    c.type = "km";
-                }
-                if(a.type == "m" && b.type == "km"){
-                   c.unit = a.unit + b.unit*1000;
-                   c.type = "m";
-                }
-                if(a.type == "m" && b.type == "m"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "m";
-                }
-                if(a.type == "m" && b.type == "cm"){
-                    c.unit = a.unit + b.unit/100;
-                    c.type = "m";
-                }
-                if(a.type == "cm" && b.type == "km"){
-                   c.unit = a.unit + b.unit*100000;
-                   c.type = "cm";
-                }
-                if(a.type == "cm" && b.type == "m"){
-                    c.unit = a.unit + b.unit*100;
-                    c.type = "cm";
-                }
-                if(a.type == "cm" && b.type == "cm"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "cm";
-                }
-            }
-
-            if(check_type(a,b) == "size"){
-                if(a.type == "ton" && b.type == "ton"){
-                   c.unit = a.unit + b.unit;
-                   c.type = "ton";
-                }
-                if(a.type == "ton" && b.type == "kg"){
-                    c.unit = a.unit * 1000 + b.unit;
-                    c.unit = c.unit/1000;
-                    c.type = "ton";
-                }
-                if(a.type == "ton" && b.type == "g"){
-                    c.unit = a.unit * 1000 + b.unit/1000;
-                    c.unit = c.unit/1000;
-                    c.type = "ton";
-                }
-                if(a.type == "kg" && b.type == "ton"){
-                   c.unit = a.unit + b.unit*1000;
-                   c.type = "kg";
-                }
-                if(a.type == "kg" && b.type == "kg"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "kg";
-                }
-                if(a.type == "kg" && b.type == "g"){
-                    c.unit = a.unit + b.unit/1000;
-                    c.type = "kg";
-                }
-                if(a.type == "g" && b.type == "ton"){
-                   c.unit = a.unit + b.unit*1000000;
-                   c.type = "g";
-                }
-                if(a.type == "g" && b.type == "kg"){
-                    c.unit = a.unit + b.unit*1000;
-                    c.type = "g";
-                }
-                if(a.type == "g" && b.type == "g"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "g";
-                }
-            }
-
-            if(check_type(a,b) == "time"){
-                if(a.type == "hour" && b.type == "hour"){
-                   c.unit = a.unit + b.unit;
-                   c.type = "hour";
-                }
-                if(a.type == "hour" && b.type == "min"){
-                    c.unit = a.unit * 60 + b.unit;
-                    c.unit = c.unit/60;
-                    c.type = "hour";
-                }
-                if(a.type == "hour" && b.type == "sec"){
-                    c.unit = a.unit * 60 + b.unit/60;
-                    c.unit = c.unit/60;
-                    c.type = "hour";
-                }
-                if(a.type == "min" && b.type == "hour"){
-                   c.unit = a.unit + b.unit*60;
-                   c.type = "min";
-                }
-                if(a.type == "min" && b.type == "min"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "min";
-                }
-                if(a.type == "min" && b.type == "sec"){
-                    c.unit = a.unit + b.unit/60;
-                    c.type = "min";
-                }
-                if(a.type == "sec" && b.type == "hour"){
-                   c.unit = a.unit + b.unit*60*60;
-                   c.type = "sec";
-                }
-                if(a.type == "sec" && b.type == "min"){
-                    c.unit = a.unit + b.unit*60;
-                    c.type = "sec";
-                }
-                if(a.type == "sec" && b.type == "sec"){
-                    c.unit = a.unit + b.unit;
-                    c.type = "sec";
-                }
-            }
-
-            if(check_type(a,b) == "money"){
-                if(a.type == "USD" && b.type == "USD"){
-                   c.unit = a.unit + b.unit;
-                   c.type = "USD";
-                }
-                if(a.type == "USD" && b.type == "ILS"){
-                    c.unit = a.unit  + b.unit/3.33;
-                    c.type = "USD";
-                }
-                if(a.type == "ILS" && b.type == "USD"){
-                    c.unit = a.unit  + b.unit*3.33;
-                    c.type = "ILS";
-                }
-                if(a.type == "ILS" && b.type == "ILS"){
-                   c.unit = a.unit + b.unit;
-                   c.type = "ILS";
-                }
-            }
-        }*/
-        return a;
-    }
-
-    NumberWithUnits operator+=(NumberWithUnits a, NumberWithUnits b){
-        /*if(check_type(a,b) == "false"){
-            throw invalid_argument("These two numbers are of different dimensions and are not connectable.");
-        }
-        else{
-            if(check_type(a,b) == "distance"){
-                if(a.type == "km" && b.type == "km"){
-                   a.unit += b.unit;
-                }
-                if(a.type == "km" && b.type == "m"){
-                    a.unit = a.unit * 1000 + b.unit;
-                    a.unit = a.unit/1000;
-                }
-                if(a.type == "km" && b.type == "cm"){
-                    a.unit = a.unit * 1000 + b.unit/100;
-                    a.unit = a.unit/1000;
-                }
-                if(a.type == "m" && b.type == "km"){
-                   a.unit = a.unit + b.unit*1000;
-                }
-                if(a.type == "m" && b.type == "m"){
-                    a.unit = a.unit + b.unit;
-                }
-                if(a.type == "m" && b.type == "cm"){
-                    a.unit = a.unit + b.unit/100;
-                }
-                if(a.type == "cm" && b.type == "km"){
-                   a.unit = a.unit + b.unit*100000;
-                }
-                if(a.type == "cm" && b.type == "m"){
-                    a.unit = a.unit + b.unit*100;
-                }
-                if(a.type == "cm" && b.type == "cm"){
-                    a.unit = a.unit + b.unit;
-                }
-            }
-
-            if(check_type(a,b) == "size"){
-                if(a.type == "ton" && b.type == "ton"){
-                   a.unit = a.unit + b.unit;
-                }
-                if(a.type == "ton" && b.type == "kg"){
-                    a.unit = a.unit * 1000 + b.unit;
-                    a.unit = a.unit/1000;
-                }
-                if(a.type == "ton" && b.type == "g"){
-                    a.unit = a.unit * 1000 + b.unit/1000;
-                    a.unit = a.unit/1000;
-                }
-                if(a.type == "kg" && b.type == "ton"){
-                   a.unit = a.unit + b.unit*1000;
-                }
-                if(a.type == "kg" && b.type == "kg"){
-                    a.unit = a.unit + b.unit;
-                }
-                if(a.type == "kg" && b.type == "g"){
-                    a.unit = a.unit + b.unit/1000;
-                }
-                if(a.type == "g" && b.type == "ton"){
-                   a.unit = a.unit + b.unit*1000000;
-                }
-                if(a.type == "g" && b.type == "kg"){
-                    a.unit = a.unit + b.unit*1000;
-                }
-                if(a.type == "g" && b.type == "g"){
-                    a.unit = a.unit + b.unit; 
-                }
-            }
-
-            if(check_type(a,b) == "time"){
-                if(a.type == "hour" && b.type == "hour"){
-                   a.unit = a.unit + b.unit;
-                }
-                if(a.type == "hour" && b.type == "min"){
-                    a.unit = a.unit * 60 + b.unit;
-                    a.unit = a.unit/60;
-                }
-                if(a.type == "hour" && b.type == "sec"){
-                    a.unit = a.unit * 60 + b.unit/60;
-                    a.unit = a.unit/60;
-                }
-                if(a.type == "min" && b.type == "hour"){
-                   a.unit = a.unit + b.unit*60;
-                }
-                if(a.type == "min" && b.type == "min"){
-                    a.unit = a.unit + b.unit;
-                }
-                if(a.type == "min" && b.type == "sec"){
-                    a.unit = a.unit + b.unit/60;
-                }
-                if(a.type == "sec" && b.type == "hour"){
-                   a.unit = a.unit + b.unit*60*60;
-                }
-                if(a.type == "sec" && b.type == "min"){
-                    a.unit = a.unit + b.unit*60;
-                }
-                if(a.type == "sec" && b.type == "sec"){
-                    a.unit = a.unit + b.unit;
-                }
-            }
-
-            if(check_type(a,b) == "money"){
-                if(a.type == "USD" && b.type == "USD"){
-                   a.unit = a.unit + b.unit;
-                }
-                if(a.type == "USD" && b.type == "ILS"){
-                    a.unit = a.unit  + b.unit/3.33;
-                }
-                if(a.type == "ILS" && b.type == "USD"){
-                    a.unit = a.unit  + b.unit*3.33; 
-                }
-                if(a.type == "ILS" && b.type == "ILS"){
-                   a.unit = a.unit + b.unit;
-                }
-            }
-            return a;
-        }*/
-        return a;
-    }
-
-    NumberWithUnits operator+(NumberWithUnits a){
-        return a;
-    }
-
-    NumberWithUnits operator-(NumberWithUnits a, NumberWithUnits b){
-        return a;
-    }
-
-    NumberWithUnits operator-=(NumberWithUnits a, NumberWithUnits b){
-        return a;
-    }
-
-    NumberWithUnits operator-(NumberWithUnits a){
-        return a;
-    }
-
-    bool operator>(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    bool operator>=(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    bool operator<(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    bool operator<=(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    bool operator==(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    bool operator!=(NumberWithUnits a, NumberWithUnits b){
-        return true;
-    }
-
-    NumberWithUnits operator++(NumberWithUnits a){
-        return a;
-    }
-
-    NumberWithUnits operator--(NumberWithUnits a){
-        return a;
-    }
-
-    NumberWithUnits operator*(double num, NumberWithUnits a){
-        return a;
-    }
-
-    ostream& operator<<(ostream& out, NumberWithUnits a){
-        return out;
-    }
-
-    istream& operator>>(istream& in, NumberWithUnits a){
+        a.type = type;
+        a.unit = value;
         return in;
     }
 
